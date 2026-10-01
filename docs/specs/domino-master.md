@@ -39,7 +39,7 @@ This tile order **is known by ALL players**.
 
 ### Step 1.1: Test application: player subscription
 
-This is a version of the master API that will be developed so that players can test their solutions during development. The player sends an API call `GET /start` to the master application, and the latter responds with a `session_id` and an index (0 to 3).
+This is a version of the master API that will be developed so that players can test their solutions during development. The player sends an API call `POST /start` to the master application, and the latter responds with a `session_id` and an index (0 to 3).
 
 Example of the master's response:
 
@@ -197,6 +197,9 @@ POST /play
 }
 ```
 
+### Particular case: player timeout
+If a player API times out, that player is automatically disqualified.
+
 ## Step 4: The end of the game
 
 The game will end if one of the following events occurs:
@@ -212,16 +215,20 @@ Example:
 - Player 1's tiles: 16-(2,5), 24-(4,6). Total = 2+5+4+6 = 17 points
 - Player 2's tiles: 6-(0,6), 7-(1,1). Total = 0+6+1+1 = 8 points
 - Player 3's tiles: 3-(0,3). Total = 0+3 = 3 points → THE WINNER
-- Player 4's tiles: 20-(3,5). Total = 3+5 = 3 points
+- Player 4's tiles: 20-(3,5). Total = 3+5 = 8 points
 
 The master application then sends a final call to all players, with the field `win` set to `true` if the player is the winner and `false` otherwise.
+
+If two or more players have the same score,  the master application declares those players as winners.
 
 Example:
 
 ```bash
-GET /end
+POST /end
 {
     "win": true
 }
 ```
 
+### A player finishes
+If a player plays its last tile, this player becomes the winner player.

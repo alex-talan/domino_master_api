@@ -1,10 +1,7 @@
 using Application.Abstractions;
-using Application.WorkItems;
-using Infrastructure.Clock;
+using Application.Domino;
+using Infrastructure.Domino;
 using Infrastructure.Options;
-using Infrastructure.Persistence;
-using Infrastructure.Persistence.Repositories;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,28 +11,20 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddOptions<SqlServerOptions>()
-            .Bind(configuration.GetSection(SqlServerOptions.SectionName))
-            .Validate(options => !string.IsNullOrWhiteSpace(options.AppDb), "ConnectionStrings:AppDb is required.")
+        services.AddOptions<DominoOptions>()
+            .Bind(configuration.GetSection(DominoOptions.SectionName))
+            .Validate(options => options.PlayerEndpoints.Length == 4, "Domino:PlayerEndpoints must contain exactly four endpoints.")
+            .Validate(options => options.PlayerTimeoutSeconds > 0, "Domino:PlayerTimeoutSeconds must be greater than zero.")
             .ValidateOnStart();
 
-        services.AddOptions<AzureOptions>()
-            .Bind(configuration.GetSection(AzureOptions.SectionName));
-
-        string connectionString = configuration.GetConnectionString("AppDb")
-            ?? throw new InvalidOperationException("Connection string 'AppDb' is required.");
-
-        services.AddDbContext<AppDbContext>(options =>
+        services.AddHttpClient<IPlayerClient, PlayerHttpClient>((serviceProvider, client) =>
         {
-            options.UseSqlServer(
-                connectionString,
-                sqlServer => sqlServer.EnableRetryOnFailure());
+            DominoOptions options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DominoOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(options.PlayerTimeoutSeconds);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         });
-
-        services.AddScoped<IUnitOfWork>(serviceProvider => serviceProvider.GetRequiredService<AppDbContext>());
-        services.AddScoped<IWorkItemRepository, WorkItemRepository>();
-        services.AddSingleton<IClock, SystemClock>();
-        services.AddScoped<WorkItemService>();
+        services.AddSingleton<IDominoRandomizer, RandomDominoRandomizer>();
+        services.AddSingleton<DominoGameService>();
 
         return services;
     }

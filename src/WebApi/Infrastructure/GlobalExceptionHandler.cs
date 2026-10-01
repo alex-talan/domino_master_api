@@ -14,6 +14,7 @@ public sealed class GlobalExceptionHandler(
         {
             NotFoundException => StatusCodes.Status404NotFound,
             ArgumentException or ArgumentOutOfRangeException => StatusCodes.Status400BadRequest,
+            InvalidOperationException => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status500InternalServerError
         };
 
