@@ -29,7 +29,7 @@ public sealed class PlayerHttpClient(HttpClient httpClient, IOptions<DominoOptio
 
     public async Task SendGameEndAsync(int playerIndex, GameEndNotification notification, CancellationToken cancellationToken)
     {
-        using HttpResponseMessage _ = await PostAsync(playerIndex, "end", notification, cancellationToken);
+        using HttpResponseMessage _ = await PostAsync(playerIndex, "end", new GameEndPayload(notification.Win, notification.YourTiles), cancellationToken);
     }
 
     private async Task<HttpResponseMessage> PostAsync(int playerIndex, string path, object payload, CancellationToken cancellationToken)
@@ -69,6 +69,10 @@ public sealed class PlayerHttpClient(HttpClient httpClient, IOptions<DominoOptio
         {
         }
     }
+
+    private sealed record GameEndPayload(
+        [property: JsonPropertyName("win")] bool Win,
+        [property: JsonPropertyName("your_tiles")] IReadOnlyList<int> YourTiles);
 
     private sealed record PlayerPlayResponsePayload(
         [property: JsonPropertyName("tile")] int Tile,

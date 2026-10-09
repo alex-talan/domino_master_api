@@ -53,9 +53,14 @@ player that cannot play responds with `tile: -1`.
 
 ```json
 {
-  "win": true
+  "win": false,
+  "your_tiles": [0, 14, 19]
 }
 ```
+
+`your_tiles` contains the recipient's remaining tiles at game end. It is empty
+for a player who wins by playing their last tile; blocked-game winners retain
+their remaining tiles.
 
 Player callback timeouts and transport failures disqualify the affected
 player. Disqualified players are represented as `null` in later play state and
@@ -86,10 +91,10 @@ attempted. This version does not implement player subscription or sessions.
 {
   "Domino": {
     "PlayerEndpoints": [
-      "http://localhost:5101",
-      "http://localhost:5102",
-      "http://localhost:5103",
-      "http://localhost:5104"
+      "http://localhost:5001",
+      "http://localhost:5002",
+      "http://localhost:5003",
+      "http://localhost:5004"
     ],
     "PlayerTimeoutSeconds": 10
   }

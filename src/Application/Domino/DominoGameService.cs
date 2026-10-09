@@ -196,7 +196,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
 
             try
             {
-                await playerClient.SendGameEndAsync(playerIndex, new GameEndNotification(winners.Contains(playerIndex)), cancellationToken);
+                await playerClient.SendGameEndAsync(playerIndex, new GameEndNotification(winners.Contains(playerIndex), hands[playerIndex].ToArray()), cancellationToken);
             }
             catch (Exception exception) when (IsPlayerFailure(exception, cancellationToken))
             {

@@ -18,7 +18,10 @@ public sealed class DominoGameServiceTests
         playerClient.GameEndNotifications.Select(notification => notification.PlayerIndex).Should().NotContain(1);
         playerClient.GameEndNotifications.Should().HaveCount(3);
         playerClient.GameEndNotifications.Single(notification => notification.PlayerIndex == 0).Notification.Win.Should().BeTrue();
+        playerClient.GameEndNotifications.Single(notification => notification.PlayerIndex == 0).Notification.YourTiles.Should().BeEmpty();
         playerClient.GameEndNotifications.Where(notification => notification.PlayerIndex != 0).Should().AllSatisfy(notification => notification.Notification.Win.Should().BeFalse());
+        playerClient.GameEndNotifications.Should().AllSatisfy(notification =>
+            notification.Notification.YourTiles.Should().BeEquivalentTo(playerClient.ExpectedRemainingTiles[notification.PlayerIndex]));
     }
 
     private sealed class OrderedRandomizer : IDominoRandomizer
@@ -28,6 +31,8 @@ public sealed class DominoGameServiceTests
 
     private sealed class RecordingPlayerClient : IPlayerClient
     {
+        public Dictionary<int, IReadOnlyList<int>> ExpectedRemainingTiles { get; } = [];
+
         public List<(int PlayerIndex, GameEndNotification Notification)> GameEndNotifications { get; } = [];
 
         public bool SawDisqualifiedPlayerState { get; private set; }
@@ -44,6 +49,7 @@ public sealed class DominoGameServiceTests
             SawDisqualifiedPlayerState |= request.Player1 is null;
             SawCurrentTurnAndHand |= request.ToPlay == $"p{playerIndex}" && request.YourTiles.Count > 0;
             HashSet<int> tiles = request.YourTiles.ToHashSet();
+            ExpectedRemainingTiles[playerIndex] = tiles.ToArray();
             int? selectedTile = request.Head is null
                 ? tiles.FirstOrDefault()
                 : tiles.FirstOrDefault(tile => Domain.Domino.DominoTile.All[tile].Contains(request.Head.Value) || Domain.Domino.DominoTile.All[tile].Contains(request.Tail!.Value));
@@ -56,6 +62,7 @@ public sealed class DominoGameServiceTests
             Domain.Domino.DominoTile tile = Domain.Domino.DominoTile.All[selectedTile.Value];
             string position = request.Head is not null && tile.Contains(request.Head.Value) ? "head" : "tail";
             tiles.Remove(selectedTile.Value);
+            ExpectedRemainingTiles[playerIndex] = tiles.ToArray();
             return Task.FromResult(new PlayerPlayResponse(selectedTile.Value, position));
         }
 

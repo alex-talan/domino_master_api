@@ -13,7 +13,7 @@ public sealed record PlayerPlayRequest(
 
 public sealed record PlayerPlayResponse(int Tile, string? Position);
 
-public sealed record GameEndNotification(bool Win);
+public sealed record GameEndNotification(bool Win, IReadOnlyList<int> YourTiles);
 
 public sealed record GameState(
     IReadOnlyList<int> Table,
