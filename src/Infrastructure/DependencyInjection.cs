@@ -24,6 +24,7 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         });
         services.AddSingleton<IDominoRandomizer, RandomDominoRandomizer>();
+        services.AddSingleton<IGameEventSink, LoggingGameEventSink>();
         services.AddSingleton<DominoGameService>();
 
         return services;

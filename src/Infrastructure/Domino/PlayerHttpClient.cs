@@ -29,7 +29,7 @@ public sealed class PlayerHttpClient(HttpClient httpClient, IOptions<DominoOptio
 
     public async Task SendGameEndAsync(int playerIndex, GameEndNotification notification, CancellationToken cancellationToken)
     {
-        using HttpResponseMessage _ = await PostAsync(playerIndex, "end", new GameEndPayload(notification.Win, notification.YourTiles), cancellationToken);
+        using HttpResponseMessage _ = await PostAsync(playerIndex, "end", new GameEndPayload(notification.Win, notification.YourTiles, notification.GameId, notification.Turn), cancellationToken);
     }
 
     private async Task<HttpResponseMessage> PostAsync(int playerIndex, string path, object payload, CancellationToken cancellationToken)
@@ -62,17 +62,21 @@ public sealed class PlayerHttpClient(HttpClient httpClient, IOptions<DominoOptio
         [property: JsonPropertyName("p2")] IReadOnlyList<int>? Player2,
         [property: JsonPropertyName("p3")] IReadOnlyList<int>? Player3,
         [property: JsonPropertyName("to_play")] string ToPlay,
-        [property: JsonPropertyName("your_tiles")] IReadOnlyList<int> YourTiles)
+        [property: JsonPropertyName("your_tiles")] IReadOnlyList<int> YourTiles,
+        [property: JsonPropertyName("game_id")] Guid GameId,
+        [property: JsonPropertyName("turn")] int Turn)
     {
         public PlayerPlayPayload(PlayerPlayRequest request)
-            : this(request.Table, request.Head, request.Tail, request.Player0, request.Player1, request.Player2, request.Player3, request.ToPlay, request.YourTiles)
+            : this(request.Table, request.Head, request.Tail, request.Player0, request.Player1, request.Player2, request.Player3, request.ToPlay, request.YourTiles, request.GameId, request.Turn)
         {
         }
     }
 
     private sealed record GameEndPayload(
         [property: JsonPropertyName("win")] bool Win,
-        [property: JsonPropertyName("your_tiles")] IReadOnlyList<int> YourTiles);
+        [property: JsonPropertyName("your_tiles")] IReadOnlyList<int> YourTiles,
+        [property: JsonPropertyName("game_id")] Guid GameId,
+        [property: JsonPropertyName("turn")] int Turn);
 
     private sealed record PlayerPlayResponsePayload(
         [property: JsonPropertyName("tile")] int Tile,

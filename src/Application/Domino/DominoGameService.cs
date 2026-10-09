@@ -2,7 +2,7 @@ using Domain.Domino;
 
 namespace Application.Domino;
 
-public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomizer randomizer)
+public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomizer randomizer, IGameEventSink eventSink)
 {
     private const int PlayerCount = 4;
     private const int TilesPerPlayer = 7;
@@ -11,6 +11,8 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
     private readonly List<int>[] playedTiles = [[], [], [], []];
     private readonly List<int> table = [];
     private readonly bool[] disqualified = new bool[PlayerCount];
+    private Guid gameId;
+    private int turn;
     private int? head;
     private int? tail;
     private bool started;
@@ -26,6 +28,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
             }
 
             started = true;
+            gameId = Guid.NewGuid();
         }
 
         IReadOnlyList<int> shuffledTiles = randomizer.Shuffle(Enumerable.Range(0, DominoTile.All.Count).ToArray());
@@ -41,6 +44,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
             if (disqualified.All(value => value))
             {
                 ended = true;
+                await NotifyResultsAsync(new HashSet<int>(), cancellationToken);
                 break;
             }
 
@@ -50,6 +54,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
                 continue;
             }
 
+            turn++;
             PlayerPlayResponse response;
             try
             {
@@ -57,6 +62,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
             }
             catch (Exception exception) when (IsPlayerFailure(exception, cancellationToken))
             {
+                RecordTurn(currentPlayer, null, false, "player_failure");
                 Disqualify(currentPlayer);
                 currentPlayer = NextPlayer(currentPlayer);
                 continue;
@@ -66,12 +72,14 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
             {
                 if (HasPlayableTile(currentPlayer))
                 {
+                    RecordTurn(currentPlayer, response, false, "A player passed while holding a playable tile.");
                     Disqualify(currentPlayer);
                     currentPlayer = NextPlayer(currentPlayer);
                     continue;
                 }
 
                 playedTiles[currentPlayer].Add(-1);
+                RecordTurn(currentPlayer, response, true, null);
                 consecutivePasses++;
                 if (consecutivePasses == PlayerCount)
                 {
@@ -83,13 +91,15 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
                 continue;
             }
 
-            if (!TryPlay(currentPlayer, response, out _))
+            if (!TryPlay(currentPlayer, response, out string? invalidReason))
             {
+                RecordTurn(currentPlayer, response, false, invalidReason);
                 Disqualify(currentPlayer);
                 currentPlayer = NextPlayer(currentPlayer);
                 continue;
             }
 
+            RecordTurn(currentPlayer, response, true, null);
             consecutivePasses = 0;
             if (hands[currentPlayer].Count == 0)
             {
@@ -110,7 +120,12 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
         GetPlayerTiles(2),
         GetPlayerTiles(3),
         $"p{currentPlayer}",
-        hands[currentPlayer].ToArray());
+        hands[currentPlayer].ToArray(),
+        gameId,
+        turn);
+
+    private void RecordTurn(int playerIndex, PlayerPlayResponse? response, bool accepted, string? reason) =>
+        eventSink.RecordTurn(new TurnDecision(gameId, turn, $"p{playerIndex}", response?.Tile, response?.Position ?? string.Empty, accepted, reason));
 
     private IReadOnlyList<int>? GetPlayerTiles(int playerIndex) => disqualified[playerIndex] ? null : playedTiles[playerIndex].ToArray();
 
@@ -189,6 +204,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
     {
         for (int playerIndex = 0; playerIndex < PlayerCount; playerIndex++)
         {
+            eventSink.RecordResult(new PlayerGameResult(gameId, turn, $"p{playerIndex}", winners.Contains(playerIndex), disqualified[playerIndex], hands[playerIndex].ToArray()));
             if (disqualified[playerIndex])
             {
                 continue;
@@ -196,7 +212,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
 
             try
             {
-                await playerClient.SendGameEndAsync(playerIndex, new GameEndNotification(winners.Contains(playerIndex), hands[playerIndex].ToArray()), cancellationToken);
+                await playerClient.SendGameEndAsync(playerIndex, new GameEndNotification(winners.Contains(playerIndex), hands[playerIndex].ToArray(), gameId, turn), cancellationToken);
             }
             catch (Exception exception) when (IsPlayerFailure(exception, cancellationToken))
             {

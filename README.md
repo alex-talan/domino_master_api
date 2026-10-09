@@ -30,6 +30,8 @@ player that cannot play responds with `tile: -1`.
 
 ```json
 {
+  "game_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "turn": 3,
   "table": [20, 5],
   "head": 3,
   "tail": 0,
@@ -53,6 +55,8 @@ player that cannot play responds with `tile: -1`.
 
 ```json
 {
+  "game_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "turn": 25,
   "win": false,
   "your_tiles": [0, 14, 19]
 }
@@ -65,6 +69,29 @@ their remaining tiles.
 Player callback timeouts and transport failures disqualify the affected
 player. Disqualified players are represented as `null` in later play state and
 do not receive the final notification.
+
+## Ordered game logs
+
+The Master assigns a UUID `game_id` at game start. `turn` starts at 1 and
+increments before each requested play, including passes, rejected moves, and
+timeouts. Skipped disqualified players do not consume a turn. Both `/play` and
+`/end` include these fields; `/end` uses the last requested turn number.
+
+Use the Master's structured logs as the source of validated outcomes, not the
+display order of Docker Compose's merged Player logs. JSON console logs contain
+event fields under `State`:
+
+- Event ID `1001` (`TurnDecision`): `game_id`, `turn`, `player`, `tile`,
+  `position`, `accepted`, and `reason`. Emitted after validation, including
+  accepted passes. Callback failures have `accepted: false`, `tile: null`, and
+  `reason: "player_failure"`.
+- Event ID `1002` (`GameResult`): `game_id`, the last `turn`, `player`, `win`,
+  `disqualified`, and remaining `points`. Recorded for all four players,
+  including disqualified players, independently of callback delivery.
+
+Order turn decisions by `(game_id, turn)`. Final-result events share the last
+turn and are distinguished by event ID and player. Logging is not durable
+storage; interrupted or cancelled games may have incomplete event sequences.
 
 ## Master API
 
@@ -115,3 +142,8 @@ dotnet run --project src/WebApi
 
 OpenAPI is available in Development at `/openapi/v1.json`; health checks are
 available at `/health`.
+
+# Start the game 
+```bash
+curl -X POST http://localhost:8000/start
+```

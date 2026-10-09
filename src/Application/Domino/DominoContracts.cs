@@ -9,11 +9,13 @@ public sealed record PlayerPlayRequest(
     IReadOnlyList<int>? Player2,
     IReadOnlyList<int>? Player3,
     string ToPlay,
-    IReadOnlyList<int> YourTiles);
+    IReadOnlyList<int> YourTiles,
+    Guid GameId,
+    int Turn);
 
 public sealed record PlayerPlayResponse(int Tile, string? Position);
 
-public sealed record GameEndNotification(bool Win, IReadOnlyList<int> YourTiles);
+public sealed record GameEndNotification(bool Win, IReadOnlyList<int> YourTiles, Guid GameId, int Turn);
 
 public sealed record GameState(
     IReadOnlyList<int> Table,
@@ -24,9 +26,11 @@ public sealed record GameState(
     IReadOnlyList<int>? Player2,
     IReadOnlyList<int>? Player3,
     string ToPlay,
-    IReadOnlyList<int> YourTiles)
+    IReadOnlyList<int> YourTiles,
+    Guid GameId,
+    int Turn)
 {
-    public PlayerPlayRequest ToPlayerRequest() => new(Table, Head, Tail, Player0, Player1, Player2, Player3, ToPlay, YourTiles);
+    public PlayerPlayRequest ToPlayerRequest() => new(Table, Head, Tail, Player0, Player1, Player2, Player3, ToPlay, YourTiles, GameId, Turn);
 }
 
 public interface IPlayerClient
