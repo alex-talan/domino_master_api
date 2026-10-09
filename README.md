@@ -18,21 +18,15 @@ the process clears the active game.
 Configure four player base URLs in `src/WebApi/appsettings.json`. The Master
 API calls the corresponding URL with these routes.
 
-### `POST /tiles`
-
-```json
-{
-  "tiles": [3, 8, 13, 21, 20, 5, 19]
-}
-```
-
+Player APIs are stateless. The Master API no longer calls a `/tiles` endpoint.
 Tile values are indexes into the known double-six list, from `0` through `27`.
 
 ### `POST /play`
 
-The request contains the current table and the played-tile history for each
-player. A player responds with a tile index and `head` or `tail` when the table
-is non-empty. A player that cannot play responds with `tile: -1`.
+The request contains the current table, the played-tile history for each
+player, the player whose turn it is, and that player's current tiles. A player
+responds with a tile index and `head` or `tail` when the table is non-empty. A
+player that cannot play responds with `tile: -1`.
 
 ```json
 {
@@ -42,7 +36,9 @@ is non-empty. A player that cannot play responds with `tile: -1`.
   "p0": [20],
   "p1": [5],
   "p2": [],
-  "p3": []
+  "p3": [],
+  "to_play": "p1",
+  "your_tiles": [25, 8, 1, 16, 27, 4, 12]
 }
 ```
 

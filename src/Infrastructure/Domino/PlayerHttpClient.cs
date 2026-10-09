@@ -11,11 +11,6 @@ public sealed class PlayerHttpClient(HttpClient httpClient, IOptions<DominoOptio
 {
     private readonly string[] playerEndpoints = options.Value.PlayerEndpoints;
 
-    public async Task SendTilesAsync(int playerIndex, IReadOnlyList<int> tiles, CancellationToken cancellationToken)
-    {
-        using HttpResponseMessage _ = await PostAsync(playerIndex, "tiles", new TilesPayload(tiles), cancellationToken);
-    }
-
     public async Task<PlayerPlayResponse> RequestPlayAsync(int playerIndex, PlayerPlayRequest request, CancellationToken cancellationToken)
     {
         using HttpResponseMessage response = await PostAsync(playerIndex, "play", new PlayerPlayPayload(request), cancellationToken);
@@ -58,8 +53,6 @@ public sealed class PlayerHttpClient(HttpClient httpClient, IOptions<DominoOptio
         return response;
     }
 
-    private sealed record TilesPayload([property: JsonPropertyName("tiles")] IReadOnlyList<int> Tiles);
-
     private sealed record PlayerPlayPayload(
         [property: JsonPropertyName("table")] IReadOnlyList<int> Table,
         [property: JsonPropertyName("head")] int? Head,
@@ -67,10 +60,12 @@ public sealed class PlayerHttpClient(HttpClient httpClient, IOptions<DominoOptio
         [property: JsonPropertyName("p0")] IReadOnlyList<int>? Player0,
         [property: JsonPropertyName("p1")] IReadOnlyList<int>? Player1,
         [property: JsonPropertyName("p2")] IReadOnlyList<int>? Player2,
-        [property: JsonPropertyName("p3")] IReadOnlyList<int>? Player3)
+        [property: JsonPropertyName("p3")] IReadOnlyList<int>? Player3,
+        [property: JsonPropertyName("to_play")] string ToPlay,
+        [property: JsonPropertyName("your_tiles")] IReadOnlyList<int> YourTiles)
     {
         public PlayerPlayPayload(PlayerPlayRequest request)
-            : this(request.Table, request.Head, request.Tail, request.Player0, request.Player1, request.Player2, request.Player3)
+            : this(request.Table, request.Head, request.Tail, request.Player0, request.Player1, request.Player2, request.Player3, request.ToPlay, request.YourTiles)
         {
         }
     }

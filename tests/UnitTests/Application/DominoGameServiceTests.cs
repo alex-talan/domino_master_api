@@ -13,8 +13,8 @@ public sealed class DominoGameServiceTests
 
         await sut.StartAsync(CancellationToken.None);
 
-        playerClient.TilesSent.Should().HaveCount(4);
         playerClient.SawDisqualifiedPlayerState.Should().BeTrue();
+        playerClient.SawCurrentTurnAndHand.Should().BeTrue();
         playerClient.GameEndNotifications.Select(notification => notification.PlayerIndex).Should().NotContain(1);
         playerClient.GameEndNotifications.Should().HaveCount(3);
         playerClient.GameEndNotifications.Single(notification => notification.PlayerIndex == 0).Notification.Win.Should().BeTrue();
@@ -28,20 +28,11 @@ public sealed class DominoGameServiceTests
 
     private sealed class RecordingPlayerClient : IPlayerClient
     {
-        private readonly Dictionary<int, HashSet<int>> remainingTiles = [];
-
-        public List<(int PlayerIndex, IReadOnlyList<int> Tiles)> TilesSent { get; } = [];
-
         public List<(int PlayerIndex, GameEndNotification Notification)> GameEndNotifications { get; } = [];
 
         public bool SawDisqualifiedPlayerState { get; private set; }
 
-        public Task SendTilesAsync(int playerIndex, IReadOnlyList<int> tiles, CancellationToken cancellationToken)
-        {
-            remainingTiles[playerIndex] = tiles.ToHashSet();
-            TilesSent.Add((playerIndex, tiles));
-            return Task.CompletedTask;
-        }
+        public bool SawCurrentTurnAndHand { get; private set; }
 
         public Task<PlayerPlayResponse> RequestPlayAsync(int playerIndex, PlayerPlayRequest request, CancellationToken cancellationToken)
         {
@@ -51,7 +42,8 @@ public sealed class DominoGameServiceTests
             }
 
             SawDisqualifiedPlayerState |= request.Player1 is null;
-            HashSet<int> tiles = remainingTiles[playerIndex];
+            SawCurrentTurnAndHand |= request.ToPlay == $"p{playerIndex}" && request.YourTiles.Count > 0;
+            HashSet<int> tiles = request.YourTiles.ToHashSet();
             int? selectedTile = request.Head is null
                 ? tiles.FirstOrDefault()
                 : tiles.FirstOrDefault(tile => Domain.Domino.DominoTile.All[tile].Contains(request.Head.Value) || Domain.Domino.DominoTile.All[tile].Contains(request.Tail!.Value));

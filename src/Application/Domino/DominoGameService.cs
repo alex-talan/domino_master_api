@@ -32,14 +32,6 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
         for (int playerIndex = 0; playerIndex < PlayerCount; playerIndex++)
         {
             hands[playerIndex].AddRange(shuffledTiles.Skip(playerIndex * TilesPerPlayer).Take(TilesPerPlayer));
-            try
-            {
-                await playerClient.SendTilesAsync(playerIndex, hands[playerIndex].ToArray(), cancellationToken);
-            }
-            catch (Exception exception) when (IsPlayerFailure(exception, cancellationToken))
-            {
-                Disqualify(playerIndex);
-            }
         }
 
         int consecutivePasses = 0;
@@ -61,7 +53,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
             PlayerPlayResponse response;
             try
             {
-                response = await playerClient.RequestPlayAsync(currentPlayer, BuildState().ToPlayerRequest(), cancellationToken);
+                response = await playerClient.RequestPlayAsync(currentPlayer, BuildState(currentPlayer).ToPlayerRequest(), cancellationToken);
             }
             catch (Exception exception) when (IsPlayerFailure(exception, cancellationToken))
             {
@@ -109,14 +101,16 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
         }
     }
 
-    private GameState BuildState() => new(
+    private GameState BuildState(int currentPlayer) => new(
         table.ToArray(),
         head,
         tail,
         GetPlayerTiles(0),
         GetPlayerTiles(1),
         GetPlayerTiles(2),
-        GetPlayerTiles(3));
+        GetPlayerTiles(3),
+        $"p{currentPlayer}",
+        hands[currentPlayer].ToArray());
 
     private IReadOnlyList<int>? GetPlayerTiles(int playerIndex) => disqualified[playerIndex] ? null : playedTiles[playerIndex].ToArray();
 

@@ -37,48 +37,34 @@ public static readonly (int, int)[] Tiles =
 
 This tile order **is known by ALL players**.
 
-### Step 1.1: Test application: player subscription
-
-This is a version of the master API that will be developed so that players can test their solutions during development. The player sends an API call `POST /start` to the master application, and the latter responds with a `session_id` and an index (0 to 3).
-
-Example of the master's response:
-
-```json
-{
-    "session_id": f47ac10b-58cc-4372-a567-0e02b2c3d479,
-    "index": 3
-}
-```
-
-> - [ ] Not sure the `session_id` is relevant.
-
-### Step 1.2: Prepare the game
+### Step 1.1: Prepare the game
 
 The master application has a list of X endpoints (the addresses of all player APIs). In the next versions, we will implement a system to create player pools, championships, and more. For this version, we assume we have only 4 endpoints corresponding to the 4 player applications. These endpoints, for this version, will be configured in a configuration file.
 
-The game will start once the master application receives a call to `POST /start`.
+The game will start once the master application receives a call to `POST /start` from an external API (it act as starting trigger).
 
 ## Step 2: Tile distribution
 
-The master application will randomly distribute 7 tiles to each player (28 total = all tiles). To do that, the master application will call all players using the endpoint `POST /tiles`, sending a list of 7 randomly selected tiles.
+The master application will randomly distribute 7 tiles to each player (28 total = all tiles). The master application will keep these 4 lists in memory, because it will need them in every turn. 
 
-Example:
-
-```json
-{
-    "tiles": [3, 8, 13, 21, 20, 5, 19]
-}
+**Example**:
+The master application must define the following lists:
+```csharp
+int[] player_1 = [3, 14, 22, 0, 7, 19, 11];
+int[] player_2 = [25, 8, 1, 16, 27, 4, 12];
+int[] player_3 = [9, 21, 17, 20, 13, 26, 18];
+int[] player_4 = [2, 10, 6, 23, 15, 24, 5];
 ```
 
-As you can see, the master application sends the indices of the tiles in the list of tiles that is well known by all players. For this example, the application sends the following tiles:
+These lists contain only the indices of the tiles in the main list `Tiles`, that is well known by all players. For example, the following tiles are assigned to the first player:
 
 - 3: (0,3)
-- 8: (1,2)
-- 13: (2,2)
-- 21: (3,6)
-- 20: (3,5)
-- 5: (0,5)
+- 14: (2,3)
+- 22: (4,4)
+- 0: (0,0)
+- 7: (1,1)
 - 19: (3,4)
+- 11: (1,5)
 
 ## Step 3: The game
 
@@ -92,19 +78,28 @@ The master application starts the game by sending the state of the table to the 
     "p0": [],
     "p1": [],
     "p2": [],
-    "p3": []
+    "p3": [],
+	"to_play": "p0",
+	"your_tiles": [3, 14, 22, 0, 7, 19, 11]
 }
 ```
 
-The `table` field contains the list of played tiles. The `pX` fields contain the list of tiles played by each player. `head` contains the available number at the **head** (front) of the table. `tail` contains the available number at the **tail** (back) of the table.
+This is the description of each field:
+- The `table` field contains the list of played tiles.
+- The `p0`, `p1`, `p2` and `p3` fields contain the list of tiles played by each player.
+- `head` contains the available number at the **head** (front) of the table.
+- `tail` contains the available number at the **tail** (back) of the table.
+- `to_play` is the name of the player that must play in that turn (ex. `p1`. This example indicates that the current player has already played the tiles in the list `"p1"`).
+- `your_tiles` is the set of tiles available to play
 
-For example, imagine the following table: `[6, 21, 19]`. The tiles are `(0,6)`, `(3,6)`, `(3,4)`. If we reorder the tiles to represent a compatible domino sequence, we obtain this:
+**EXAMPLE**:
+Imagine the following table: `[6, 21, 19]`. The tiles are `(0,6)`, `(3,6)`, `(3,4)`. If we reorder the tiles to represent a compatible domino sequence, we obtain this:
 
 `(0,6)-(6,3)-(3,4)`
 
 Thus, the 6 of the first tile is compatible with the 6 of the second tile, and the 3 of the second tile is compatible with the 3 of the third tile. In this scenario, the **head** of the table is 0 (the first number of the sequence), and the **tail** is 4 (the last number of the sequence).
 
-In the first call to the first player, of course, no player has played yet, so all lists are empty and `head` and `tail` are `null`.
+In the first call to the first player, of course, no player has played yet, so all lists are empty and `head` and `tail` are `null`. The first player is always `p0` and the list of player's tiles contains 7 tiles (`your_tiles`).
 
 To send this information to player 1, the master application calls the endpoint `POST /play` with the previous payload. The player will respond with the tile they want to place and its position (`head` or `tail`).
 
@@ -112,25 +107,27 @@ Example:
 
 ```json
 {
-    "tile": 20,
+    "tile": 22,
     "position": "tail"
 }
 ```
 
-The first player played the tile `(3,5)`. Note that, in this case, the position is not relevant because the table is empty.
+The first player played the tile `(4,4)`. Note that, in this case, the position is not relevant because the table is empty.
 
 The game continues. The master application receives the play from player 1, performs some validations (we will see that later), and asks the second player to play:
 
 ```bash
 POST /play
 {
-    "table": [20],
-    "head": 3,
-    "tail": 5,
-    "p0": [20],
+    "table": [22],
+    "head": 4,
+    "tail": 4,
+    "p0": [22],
     "p1": [],
     "p2": [],
-    "p3": []
+    "p3": [],
+	"to_play": "p1",
+	"your_tiles": [25, 8, 1, 16, 27, 4, 12]
 }
 ```
 
@@ -138,36 +135,36 @@ Now player 2 (index=1) plays, sending the following response:
 
 ```json
 {
-    "tile": 5,
+    "tile": 4,
     "position": "tail"
 }
 ```
 
-Player 2 played the tile `(0,5)` at the back (`tail`).
+Player 2 played the tile `(0,4)` at the back (`tail`).
 
 The master application will validate the play according to the following rules:
 
 - If the table is empty, the position is not relevant: the tile is added to the table, and the play is valid.
-- If the table contains at least one tile, the position IS relevant, so the master application will verify whether the tile sent by the player contains the number assigned to the position they selected in the play. For this example, the player played the tile `(0,5)` at the tail. The tail of the game is 5 (`"tail"=5`), and it is contained in the played tile, so the play is valid.
+- If the table contains at least one tile, the position IS relevant, so the master application will verify whether the tile sent by the player contains the number assigned to the position they selected in the play. For this example, the player played the tile `(0,4)` at the tail. The tail of the game is 4 (`"tail":4`), and it is contained in the played tile, so the play is valid.
 
-If the play is not validated, it is considered cheating, and the player is disqualified (e.g., `"p1": null`).
+If the play is not validated, it is considered cheating, and the player is disqualified (e.g., `"p1": null`). The player 1 is no longer asked to play, and their tiles are (of course) out of play.
 
 If the play is validated, the following payload is sent to the third player:
 
 ```bash
 POST /play
 {
-    "table": [20, 5],
-    "head": 3,
+    "table": [22, 4],
+    "head": 4,
     "tail": 0,
-    "p0": [20],
-    "p1": [5],
+    "p0": [22],
+    "p1": [4],
     "p2": [],
-    "p3": []
+    "p3": [],
+	"to_play": "p2",
+	"your_tiles": [9, 21, 17, 20, 13, 26, 18]
 }
 ```
-
-...and so on.
 
 ### Particular case: the player has no tile to play
 
@@ -187,15 +184,47 @@ In this case, the fourth player is called with the following payload (`head` and
 ```bash
 POST /play
 {
-    "table": [20, 5],
-    "head": 3,
+    "table": [22, 4],
+    "head": 4,
     "tail": 0,
+    "p0": [22],
+    "p1": [4],
+    "p2": [-1],
+    "p3": [],
+	"to_play": "p3",
+	"your_tiles": [2, 10, 6, 23, 15, 24, 5]
+}
+```
+
+**Important**: if a player sends a `-1` play, but he actually can play, it is considered cheating, and he is automatically disqualified. 
+
+### Subsequent rounds
+If we follow the example, it is fourth player's turn, so imagine he plays this:
+```json
+{
+    "tile": 2,
+    "position": "tail"
+}
+```
+
+Then, the first round is finished and the following call is sent to the first player:
+```bash
+POST /play
+{
+    "table": [22, 4, 2],
+    "head": 4,
+    "tail": 2,
     "p0": [20],
     "p1": [5],
     "p2": [-1],
-    "p3": []
+    "p3": [2],
+	"to_play": "p0",
+	"your_tiles": [3, 14, 0, 7, 19, 11]
 }
 ```
+Note that now, the current player's 1 tiles are updated: the tile 22 (already played) has been removed.
+
+And the game continues: it is now second player's turn. And so on...
 
 ### Particular case: player timeout
 If a player API times out, that player is automatically disqualified.
@@ -231,4 +260,4 @@ POST /end
 ```
 
 ### A player finishes
-If a player plays its last tile, this player becomes the winner player.
+The first player to play its last tile, becomes the winner. The other are declared losers.
