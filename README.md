@@ -57,36 +57,41 @@ The request contains the current table, the played-tile history for each player,
 
 Player callback timeouts and transport failures disqualify the affected player. Disqualified players are represented as `null` in later play state and do not receive the final notification.
 
-## Ordered game logs
+## Batch statistics
 
-Console logging remains JSON. Game messages are also written as plain text to
-`output.log` in the application's current working directory, one message per
-line without JSON metadata. Each accepted game start overwrites the file;
-framework and HTTP request logs are not included. The directory must be writable.
+`POST /start?games=100` runs 100 games sequentially. Each game has fresh hands,
+table state, disqualification flags, and a new game ID. The Master retains only
+four win counters across games, not turn histories or per-game result records.
 
-The Master assigns a UUID `game_id` at game start. `turn` starts at 1 and increments before each requested play, including passes, rejected moves, and timeouts. Skipped disqualified players do not consume a turn. Both `/play` and `/end` include these fields; `/end` uses the last requested turn number.
-
-Use the Master's structured logs as the source of validated outcomes, not the display order of Docker Compose's merged Player logs. Each message mirrors the Player log format, with `player1`–`player4` corresponding to `p0`–`p3`:
+After all games finish, `output.log` in the application's current working
+directory is overwritten with the win totals. The directory must be writable.
+For example:
 
 ```text
-player1 | TURN:1 - TABLE:[] - My Tiles:[25, 18, 20, 22, 6, 14, 9] - My Move:(25, head) | game_id:... player:p0 accepted:True
-player3 | TURN:6 - TABLE:[22, 4] - My Tiles:[3, 9] - INCORRECT MOVE:(3, tail) - The tile does not match the table tail. - DISQUALIFIED | ...
-player3 | WINNER | Final Tiles:[] | game_id:... turn:40 player:p2 win:True disqualified:False points:0
-player1 | Did not win | Final Tiles:[22] | ...
+Player1 wins 20 games
+Player2 wins 70 games
+Player3 wins 10 games
+Player4 wins 0 games
 ```
 
-`TABLE` and `My Tiles` show the state sent to the player before the move. JSON console logs also contain these fields under `State`:
+Player1 through Player4 correspond to protocol players p0 through p3. Every
+tied winner receives one win, so the totals may exceed the number of games.
+Games where everyone is disqualified have no winner. Batch runs do not write
+individual turn or result logs; framework console logging remains JSON.
 
-- Event ID `1001` (`TurnDecision`): `player_name`, `game_id`, `turn`, `player`, `table`, `player_tiles`, `tile`, `position`, `accepted`, and `reason`. Emitted after validation, including accepted passes. Incorrect moves and callback failures are logged as warnings; callback failures have no tile and `reason: "player_failure"`.
-- Event ID `1002` (`GameResult`): `player_name`, `outcome`, `your_tiles`, `game_id`, the last `turn`, `player`, `win`, `disqualified`, and remaining `points`. Recorded for all four players, including disqualified players, independently of callback delivery.
-
-Order turn decisions by `(game_id, turn)`. Final-result events share the last turn and are distinguished by event ID and player. Logging is not durable storage; interrupted or cancelled games may have incomplete event sequences.
+The Master assigns a UUID `game_id` at game start. `turn` starts at 1 and increments before each requested play, including passes, rejected moves, and timeouts. Skipped disqualified players do not consume a turn. Both `/play` and `/end` include these fields; `/end` uses the last requested turn number.
 
 ## Master API
 
 ### `POST /start`
 
-Starts the game using the four configured player endpoints. The request runs the game loop and returns `202 Accepted` after final notifications have been attempted. This version does not implement player subscription or sessions.
+Starts a sequential batch using the four configured player endpoints. The
+optional `games` query parameter is a positive integer and defaults to 1. The
+request returns `202 Accepted` after all games, final notifications, and the
+statistics write complete. Invalid counts return `400`; a concurrent batch
+returns `409`. A subsequent request starts a new batch with new totals.
+Cancellation stops the batch without publishing a completed summary. This
+version does not implement player subscription or sessions.
 
 ## Game rules
 
@@ -133,4 +138,5 @@ available at `/health`.
 # Start the game 
 ```bash
 curl -X POST http://localhost:8000/start
+curl -X POST "http://localhost:8000/start?games=100"
 ```

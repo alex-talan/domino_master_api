@@ -28,7 +28,8 @@ public static class DependencyInjection
         services.AddSingleton<GameFileLoggerProvider>();
         services.AddSingleton<ILoggerProvider>(serviceProvider => serviceProvider.GetRequiredService<GameFileLoggerProvider>());
         services.AddSingleton<IGameEventSink, LoggingGameEventSink>();
-        services.AddSingleton<DominoGameService>();
+        services.AddSingleton<IGameStatisticsWriter, GameStatisticsWriter>();
+        services.AddSingleton<DominoBatchService>();
 
         return services;
     }

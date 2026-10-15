@@ -7,6 +7,95 @@ namespace UnitTests.Application;
 public sealed class DominoGameServiceTests
 {
     [Fact]
+    public async Task Batch_ShouldStartFreshGamesAndWriteOnlyWinTotals()
+    {
+        RecordingPlayerClient playerClient = new();
+        IGameStatisticsWriter writer = Substitute.For<IGameStatisticsWriter>();
+        DominoBatchService sut = new(playerClient, new OrderedRandomizer(), writer);
+
+        await sut.StartAsync(3, CancellationToken.None);
+
+        PlayerPlayRequest[] firstTurns = playerClient.Requests.Where(request => request.Turn == 1).ToArray();
+        firstTurns.Should().HaveCount(3);
+        firstTurns.Select(request => request.GameId).Distinct().Should().HaveCount(3);
+        firstTurns.Should().AllSatisfy(request =>
+        {
+            request.ToPlay.Should().Be("p0");
+            request.Table.Should().BeEmpty();
+            request.YourTiles.Should().HaveCount(7);
+            request.Player0.Should().BeEmpty();
+            request.Player1.Should().BeEmpty();
+        });
+        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 3, 0, 0, 0 })), CancellationToken.None);
+
+        await sut.StartAsync(1, CancellationToken.None);
+
+        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 1, 0, 0, 0 })), CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task Batch_ShouldRejectInvalidGameCount(int games)
+    {
+        IGameStatisticsWriter writer = Substitute.For<IGameStatisticsWriter>();
+        DominoBatchService sut = new(Substitute.For<IPlayerClient>(), new OrderedRandomizer(), writer);
+
+        Func<Task> action = () => sut.StartAsync(games, CancellationToken.None);
+
+        await action.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        await writer.DidNotReceive().WriteAsync(Arg.Any<IReadOnlyList<int>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Batch_ShouldCountEveryTiedWinner()
+    {
+        IPlayerClient playerClient = Substitute.For<IPlayerClient>();
+        playerClient.RequestPlayAsync(Arg.Any<int>(), Arg.Any<PlayerPlayRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(new PlayerPlayResponse(call.Arg<PlayerPlayRequest>().Turn == 1 ? 0 : -1, string.Empty)));
+        IDominoRandomizer randomizer = Substitute.For<IDominoRandomizer>();
+        randomizer.Shuffle(Arg.Any<IReadOnlyList<int>>()).Returns(new int[]
+        {
+            0, 1, 2, 3, 4, 5, 6,
+            7, 8, 9, 17, 23, 26, 27,
+            24, 25, 13, 10, 11, 12, 16,
+            14, 15, 18, 19, 20, 21, 22
+        });
+        IGameStatisticsWriter writer = Substitute.For<IGameStatisticsWriter>();
+        DominoBatchService sut = new(playerClient, randomizer, writer);
+
+        await sut.StartAsync(2, CancellationToken.None);
+
+        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 0, 2, 2, 2 })), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Batch_ShouldRejectOverlapAndAllowNewRunAfterCancellation()
+    {
+        IPlayerClient playerClient = Substitute.For<IPlayerClient>();
+        TaskCompletionSource<PlayerPlayResponse> pendingPlay = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        playerClient.RequestPlayAsync(Arg.Any<int>(), Arg.Any<PlayerPlayRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call => pendingPlay.Task.WaitAsync(call.Arg<CancellationToken>()));
+        IGameStatisticsWriter writer = Substitute.For<IGameStatisticsWriter>();
+        DominoBatchService sut = new(playerClient, new OrderedRandomizer(), writer);
+        using CancellationTokenSource cancellation = new();
+        Task runningBatch = sut.StartAsync(2, cancellation.Token);
+
+        Func<Task> overlappingBatch = () => sut.StartAsync(1, CancellationToken.None);
+        await overlappingBatch.Should().ThrowAsync<InvalidOperationException>();
+        cancellation.Cancel();
+        Func<Task> cancelledBatch = () => runningBatch;
+        await cancelledBatch.Should().ThrowAsync<OperationCanceledException>();
+        await writer.DidNotReceive().WriteAsync(Arg.Any<IReadOnlyList<int>>(), Arg.Any<CancellationToken>());
+
+        playerClient.RequestPlayAsync(Arg.Any<int>(), Arg.Any<PlayerPlayRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PlayerPlayResponse(-1, string.Empty)));
+        await sut.StartAsync(1, CancellationToken.None);
+
+        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.All(count => count == 0)), CancellationToken.None);
+    }
+
+    [Fact]
     public async Task StartAsync_ShouldDisqualifyPlayerThatTimesOut()
     {
         RecordingPlayerClient playerClient = new();
