@@ -27,6 +27,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
                 throw new InvalidOperationException("The game has already started.");
             }
 
+            eventSink.BeginGame();
             started = true;
             gameId = Guid.NewGuid();
         }

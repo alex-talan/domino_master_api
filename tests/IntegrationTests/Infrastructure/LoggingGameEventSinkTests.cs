@@ -13,7 +13,8 @@ public sealed class LoggingGameEventSinkTests
     public void RecordTurn_ShouldLogPlayerStyleTurn_WhenMoveIsAccepted()
     {
         CapturingLogger logger = new();
-        LoggingGameEventSink sut = new(logger);
+        using GameFileLoggerProvider fileLoggerProvider = new();
+        LoggingGameEventSink sut = new(logger, fileLoggerProvider);
 
         sut.RecordTurn(new TurnDecision(GameId, 1, "p0", 25, "head", true, null, [], [25, 18, 20, 22, 6, 14, 9]));
 
@@ -27,7 +28,8 @@ public sealed class LoggingGameEventSinkTests
     public void RecordTurn_ShouldLogWarningWithMove_WhenMoveIsIncorrect()
     {
         CapturingLogger logger = new();
-        LoggingGameEventSink sut = new(logger);
+        using GameFileLoggerProvider fileLoggerProvider = new();
+        LoggingGameEventSink sut = new(logger, fileLoggerProvider);
 
         sut.RecordTurn(new TurnDecision(GameId, 6, "p2", 3, "tail", false, "The tile does not match the table tail.", [22, 4], [3, 9]));
 
@@ -44,7 +46,8 @@ public sealed class LoggingGameEventSinkTests
     public void RecordResult_ShouldLogOutcomeAndFinalTiles(bool win, bool disqualified, int[] tiles, string expected)
     {
         CapturingLogger logger = new();
-        LoggingGameEventSink sut = new(logger);
+        using GameFileLoggerProvider fileLoggerProvider = new();
+        LoggingGameEventSink sut = new(logger, fileLoggerProvider);
 
         sut.RecordResult(new PlayerGameResult(GameId, 40, "p2", win, disqualified, tiles));
 
@@ -52,9 +55,55 @@ public sealed class LoggingGameEventSinkTests
         logger.Entries[0].Message.Should().StartWith(expected);
     }
 
-    private sealed class CapturingLogger : ILogger<LoggingGameEventSink>
+    [Fact]
+    public void BeginGame_ShouldOverwriteFileAndWriteOnlyGameMessages()
+    {
+        DirectoryInfo directory = Directory.CreateTempSubdirectory("domino-logs-");
+        string outputPath = Path.Combine(directory.FullName, "output.log");
+        try
+        {
+            File.WriteAllText(outputPath, "previous game output");
+            CapturingLogger consoleLogger = new();
+            using GameFileLoggerProvider fileLoggerProvider = new(outputPath);
+            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddProvider(consoleLogger);
+                builder.AddProvider(fileLoggerProvider);
+            });
+            LoggingGameEventSink sut = new(loggerFactory.CreateLogger<LoggingGameEventSink>(), fileLoggerProvider);
+
+            sut.BeginGame();
+            File.ReadAllText(outputPath).Should().BeEmpty();
+            sut.RecordTurn(new TurnDecision(GameId, 1, "p0", 25, "head", true, null, [], [25, 18]));
+            sut.RecordTurn(new TurnDecision(GameId, 2, "p1", 3, "tail", false, "Incorrect tile.", [25], [3, 9]));
+            sut.RecordResult(new PlayerGameResult(GameId, 2, "p0", true, false, []));
+            loggerFactory.CreateLogger("Microsoft.AspNetCore").LogInformation(new EventId(1001), "Framework message");
+
+            consoleLogger.Entries.Should().HaveCount(3);
+            File.ReadAllLines(outputPath).Should().Equal(consoleLogger.Entries.Select(entry => entry.Message));
+
+            sut.BeginGame();
+            File.ReadAllText(outputPath).Should().BeEmpty();
+            sut.RecordResult(new PlayerGameResult(Guid.NewGuid(), 1, "p1", false, true, [0, 7]));
+            File.ReadAllLines(outputPath).Should().Equal(consoleLogger.Entries[^1].Message);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private sealed class CapturingLogger : ILogger<LoggingGameEventSink>, ILoggerProvider
     {
         public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => categoryName == typeof(LoggingGameEventSink).FullName
+            ? this
+            : Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+
+        public void Dispose()
+        {
+        }
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 

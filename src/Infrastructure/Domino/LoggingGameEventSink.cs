@@ -3,10 +3,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Domino;
 
-public sealed class LoggingGameEventSink(ILogger<LoggingGameEventSink> logger) : IGameEventSink
+public sealed class LoggingGameEventSink(ILogger<LoggingGameEventSink> logger, GameFileLoggerProvider fileLoggerProvider) : IGameEventSink
 {
     private static readonly EventId TurnDecisionEvent = new(1001, "TurnDecision");
     private static readonly EventId GameResultEvent = new(1002, "GameResult");
+
+    public void BeginGame() => fileLoggerProvider.BeginGame();
 
     public void RecordTurn(TurnDecision decision)
     {

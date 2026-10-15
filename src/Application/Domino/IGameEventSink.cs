@@ -15,6 +15,8 @@ public sealed record PlayerGameResult(Guid GameId, int Turn, string Player, bool
 
 public interface IGameEventSink
 {
+    public void BeginGame();
+
     public void RecordTurn(TurnDecision decision);
 
     public void RecordResult(PlayerGameResult result);

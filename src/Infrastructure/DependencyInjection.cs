@@ -4,6 +4,7 @@ using Infrastructure.Domino;
 using Infrastructure.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Infrastructure;
 
@@ -24,6 +25,8 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         });
         services.AddSingleton<IDominoRandomizer, RandomDominoRandomizer>();
+        services.AddSingleton<GameFileLoggerProvider>();
+        services.AddSingleton<ILoggerProvider>(serviceProvider => serviceProvider.GetRequiredService<GameFileLoggerProvider>());
         services.AddSingleton<IGameEventSink, LoggingGameEventSink>();
         services.AddSingleton<DominoGameService>();
 

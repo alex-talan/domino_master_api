@@ -58,6 +58,11 @@ public sealed class DominoGameServiceTests
             notification.Notification.Turn.Should().Be(playerClient.Requests.Count);
         });
         eventSink.TurnCountAtFirstResult.Should().Be(playerClient.Requests.Count);
+        eventSink.GamesStarted.Should().Be(1);
+
+        Func<Task> duplicateStart = () => sut.StartAsync(CancellationToken.None);
+        await duplicateStart.Should().ThrowAsync<InvalidOperationException>();
+        eventSink.GamesStarted.Should().Be(1);
     }
 
     [Theory]
@@ -99,6 +104,10 @@ public sealed class DominoGameServiceTests
 
     private sealed class RecordingGameEventSink : IGameEventSink
     {
+        public int GamesStarted { get; private set; }
+
+        public void BeginGame() => GamesStarted++;
+
         public List<TurnDecision> Decisions { get; } = [];
 
         public List<PlayerGameResult> Results { get; } = [];

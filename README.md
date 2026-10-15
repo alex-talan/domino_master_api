@@ -59,6 +59,11 @@ Player callback timeouts and transport failures disqualify the affected player. 
 
 ## Ordered game logs
 
+Console logging remains JSON. Game messages are also written as plain text to
+`output.log` in the application's current working directory, one message per
+line without JSON metadata. Each accepted game start overwrites the file;
+framework and HTTP request logs are not included. The directory must be writable.
+
 The Master assigns a UUID `game_id` at game start. `turn` starts at 1 and increments before each requested play, including passes, rejected moves, and timeouts. Skipped disqualified players do not consume a turn. Both `/play` and `/end` include these fields; `/end` uses the last requested turn number.
 
 Use the Master's structured logs as the source of validated outcomes, not the display order of Docker Compose's merged Player logs. Each message mirrors the Player log format, with `player1`–`player4` corresponding to `p0`–`p3`:
