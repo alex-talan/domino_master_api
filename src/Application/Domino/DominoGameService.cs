@@ -55,14 +55,15 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
             }
 
             turn++;
+            GameState state = BuildState(currentPlayer);
             PlayerPlayResponse response;
             try
             {
-                response = await playerClient.RequestPlayAsync(currentPlayer, BuildState(currentPlayer).ToPlayerRequest(), cancellationToken);
+                response = await playerClient.RequestPlayAsync(currentPlayer, state.ToPlayerRequest(), cancellationToken);
             }
             catch (Exception exception) when (IsPlayerFailure(exception, cancellationToken))
             {
-                RecordTurn(currentPlayer, null, false, "player_failure");
+                RecordTurn(state, null, false, "player_failure");
                 Disqualify(currentPlayer);
                 currentPlayer = NextPlayer(currentPlayer);
                 continue;
@@ -72,14 +73,14 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
             {
                 if (HasPlayableTile(currentPlayer))
                 {
-                    RecordTurn(currentPlayer, response, false, "A player passed while holding a playable tile.");
+                    RecordTurn(state, response, false, "A player passed while holding a playable tile.");
                     Disqualify(currentPlayer);
                     currentPlayer = NextPlayer(currentPlayer);
                     continue;
                 }
 
                 playedTiles[currentPlayer].Add(-1);
-                RecordTurn(currentPlayer, response, true, null);
+                RecordTurn(state, response, true, null);
                 consecutivePasses++;
                 if (consecutivePasses == PlayerCount)
                 {
@@ -93,13 +94,13 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
 
             if (!TryPlay(currentPlayer, response, out string? invalidReason))
             {
-                RecordTurn(currentPlayer, response, false, invalidReason);
+                RecordTurn(state, response, false, invalidReason);
                 Disqualify(currentPlayer);
                 currentPlayer = NextPlayer(currentPlayer);
                 continue;
             }
 
-            RecordTurn(currentPlayer, response, true, null);
+            RecordTurn(state, response, true, null);
             consecutivePasses = 0;
             if (hands[currentPlayer].Count == 0)
             {
@@ -124,8 +125,9 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
         gameId,
         turn);
 
-    private void RecordTurn(int playerIndex, PlayerPlayResponse? response, bool accepted, string? reason) =>
-        eventSink.RecordTurn(new TurnDecision(gameId, turn, $"p{playerIndex}", response?.Tile, response?.Position ?? string.Empty, accepted, reason));
+    private void RecordTurn(GameState state, PlayerPlayResponse? response, bool accepted, string? reason) =>
+        eventSink.RecordTurn(new TurnDecision(
+            state.GameId, state.Turn, state.ToPlay, response?.Tile, response?.Position ?? string.Empty, accepted, reason, state.Table, state.YourTiles));
 
     private IReadOnlyList<int>? GetPlayerTiles(int playerIndex) => disqualified[playerIndex] ? null : playedTiles[playerIndex].ToArray();
 

@@ -1,32 +1,23 @@
 # Domino Master API
 
-An in-memory Master API that coordinates a four-player Domino game. The Master
-API deals the complete double-six set, sends turn state to players, validates
-plays, disqualifies cheating or unavailable players, detects blocked games, and
-notifies players when the game ends.
+An in-memory Master API that coordinates a four-player Domino game. The Master API deals the complete double-six set, sends turn state to players, validates plays, disqualifies cheating or unavailable players, detects blocked games, and notifies players when the game ends.
 
 ## Requirements
 
 - .NET 10 SDK
 - Four player APIs reachable by HTTP
 
-The application intentionally has no persistence in this version. Restarting
-the process clears the active game.
+The application intentionally has no persistence in this version. Restarting the process clears the active game.
 
 ## Player API contract
 
-Configure four player base URLs in `src/WebApi/appsettings.json`. The Master
-API calls the corresponding URL with these routes.
+Configure four player base URLs in `src/WebApi/appsettings.json`. The Master API calls the corresponding URL with these routes.
 
-Player APIs are stateless. The Master API no longer calls a `/tiles` endpoint.
-Tile values are indexes into the known double-six list, from `0` through `27`.
+Player APIs are stateless. The Master API no longer calls a `/tiles` endpoint. Tile values are indexes into the known double-six list, from `0` through `27`.
 
 ### `POST /play`
 
-The request contains the current table, the played-tile history for each
-player, the player whose turn it is, and that player's current tiles. A player
-responds with a tile index and `head` or `tail` when the table is non-empty. A
-player that cannot play responds with `tile: -1`.
+The request contains the current table, the played-tile history for each player, the player whose turn it is, and that player's current tiles. A player responds with a tile index and `head` or `tail` when the table is non-empty. A player that cannot play responds with `tile: -1`.
 
 ```json
 {
@@ -39,7 +30,7 @@ player that cannot play responds with `tile: -1`.
   "p1": [5],
   "p2": [],
   "p3": [],
-  "to_play": "p1",
+  "to_play": "p2",
   "your_tiles": [25, 8, 1, 16, 27, 4, 12]
 }
 ```
@@ -62,44 +53,35 @@ player that cannot play responds with `tile: -1`.
 }
 ```
 
-`your_tiles` contains the recipient's remaining tiles at game end. It is empty
-for a player who wins by playing their last tile; blocked-game winners retain
-their remaining tiles.
+`your_tiles` contains the recipient's remaining tiles at game end. It is empty for a player who wins by playing their last tile; blocked-game winners retain their remaining tiles.
 
-Player callback timeouts and transport failures disqualify the affected
-player. Disqualified players are represented as `null` in later play state and
-do not receive the final notification.
+Player callback timeouts and transport failures disqualify the affected player. Disqualified players are represented as `null` in later play state and do not receive the final notification.
 
 ## Ordered game logs
 
-The Master assigns a UUID `game_id` at game start. `turn` starts at 1 and
-increments before each requested play, including passes, rejected moves, and
-timeouts. Skipped disqualified players do not consume a turn. Both `/play` and
-`/end` include these fields; `/end` uses the last requested turn number.
+The Master assigns a UUID `game_id` at game start. `turn` starts at 1 and increments before each requested play, including passes, rejected moves, and timeouts. Skipped disqualified players do not consume a turn. Both `/play` and `/end` include these fields; `/end` uses the last requested turn number.
 
-Use the Master's structured logs as the source of validated outcomes, not the
-display order of Docker Compose's merged Player logs. JSON console logs contain
-event fields under `State`:
+Use the Master's structured logs as the source of validated outcomes, not the display order of Docker Compose's merged Player logs. Each message mirrors the Player log format, with `player1`–`player4` corresponding to `p0`–`p3`:
 
-- Event ID `1001` (`TurnDecision`): `game_id`, `turn`, `player`, `tile`,
-  `position`, `accepted`, and `reason`. Emitted after validation, including
-  accepted passes. Callback failures have `accepted: false`, `tile: null`, and
-  `reason: "player_failure"`.
-- Event ID `1002` (`GameResult`): `game_id`, the last `turn`, `player`, `win`,
-  `disqualified`, and remaining `points`. Recorded for all four players,
-  including disqualified players, independently of callback delivery.
+```text
+player1 | TURN:1 - TABLE:[] - My Tiles:[25, 18, 20, 22, 6, 14, 9] - My Move:(25, head) | game_id:... player:p0 accepted:True
+player3 | TURN:6 - TABLE:[22, 4] - My Tiles:[3, 9] - INCORRECT MOVE:(3, tail) - The tile does not match the table tail. - DISQUALIFIED | ...
+player3 | WINNER | Final Tiles:[] | game_id:... turn:40 player:p2 win:True disqualified:False points:0
+player1 | Did not win | Final Tiles:[22] | ...
+```
 
-Order turn decisions by `(game_id, turn)`. Final-result events share the last
-turn and are distinguished by event ID and player. Logging is not durable
-storage; interrupted or cancelled games may have incomplete event sequences.
+`TABLE` and `My Tiles` show the state sent to the player before the move. JSON console logs also contain these fields under `State`:
+
+- Event ID `1001` (`TurnDecision`): `player_name`, `game_id`, `turn`, `player`, `table`, `player_tiles`, `tile`, `position`, `accepted`, and `reason`. Emitted after validation, including accepted passes. Incorrect moves and callback failures are logged as warnings; callback failures have no tile and `reason: "player_failure"`.
+- Event ID `1002` (`GameResult`): `player_name`, `outcome`, `your_tiles`, `game_id`, the last `turn`, `player`, `win`, `disqualified`, and remaining `points`. Recorded for all four players, including disqualified players, independently of callback delivery.
+
+Order turn decisions by `(game_id, turn)`. Final-result events share the last turn and are distinguished by event ID and player. Logging is not durable storage; interrupted or cancelled games may have incomplete event sequences.
 
 ## Master API
 
 ### `POST /start`
 
-Starts the game using the four configured player endpoints. The request runs
-the game loop and returns `202 Accepted` after final notifications have been
-attempted. This version does not implement player subscription or sessions.
+Starts the game using the four configured player endpoints. The request runs the game loop and returns `202 Accepted` after final notifications have been attempted. This version does not implement player subscription or sessions.
 
 ## Game rules
 

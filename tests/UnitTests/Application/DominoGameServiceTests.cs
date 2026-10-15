@@ -35,8 +35,15 @@ public sealed class DominoGameServiceTests
             decision.GameId.Should().Be(request.GameId);
             decision.Player.Should().Be(request.ToPlay);
         });
-        eventSink.Decisions.Single(decision => decision.Turn == 2).Should().Be(
-            new TurnDecision(gameId, 2, "p1", null, string.Empty, false, "player_failure"));
+        TurnDecision timeout = eventSink.Decisions.Single(decision => decision.Turn == 2);
+        timeout.Player.Should().Be("p1");
+        timeout.Tile.Should().BeNull();
+        timeout.Accepted.Should().BeFalse();
+        timeout.Reason.Should().Be("player_failure");
+        timeout.PlayerTiles.Should().Equal(playerClient.Requests[1].YourTiles);
+        TurnDecision first = eventSink.Decisions[0];
+        first.Table.Should().BeEmpty();
+        first.PlayerTiles.Should().Equal(playerClient.Requests[0].YourTiles).And.Contain(first.Tile!.Value);
         eventSink.Decisions.Should().Contain(decision => decision.Tile == -1 && decision.Accepted);
         eventSink.Results.Should().HaveCount(4);
         eventSink.Results.Single(result => result.Player == "p1").Disqualified.Should().BeTrue();
