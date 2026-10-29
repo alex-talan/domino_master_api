@@ -6,6 +6,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
 {
     private const int PlayerCount = 4;
     private const int TilesPerPlayer = 7;
+    private static readonly int DoubleSixTile = DominoTile.All.ToList().IndexOf(new DominoTile(6, 6));
     private readonly object synchronization = new();
     private readonly List<int>[] hands = [[], [], [], []];
     private readonly List<int>[] playedTiles = [[], [], [], []];
@@ -13,6 +14,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
     private readonly bool[] disqualified = new bool[PlayerCount];
     private Guid gameId;
     private int turn;
+    private int lastPlayerToPlay;
     private int? head;
     private int? tail;
     private bool started;
@@ -37,6 +39,9 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
         {
             hands[playerIndex].AddRange(shuffledTiles.Skip(playerIndex * TilesPerPlayer).Take(TilesPerPlayer));
         }
+
+        int doubleSixPlayer = Array.FindIndex(hands, hand => hand.Contains(DoubleSixTile));
+        (hands[0], hands[doubleSixPlayer]) = (hands[doubleSixPlayer], hands[0]);
 
         int consecutivePasses = 0;
         int currentPlayer = 0;
@@ -102,6 +107,7 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
             }
 
             RecordTurn(state, response, true, null);
+            lastPlayerToPlay = currentPlayer;
             consecutivePasses = 0;
             if (hands[currentPlayer].Count == 0)
             {
@@ -144,6 +150,12 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
         DominoTile tile = DominoTile.All[response.Tile];
         if (table.Count == 0)
         {
+            if (response.Tile != DoubleSixTile)
+            {
+                invalidReason = "The opening tile must be [6|6].";
+                return false;
+            }
+
             table.Add(response.Tile);
             head = tile.First;
             tail = tile.Second;
@@ -186,22 +198,30 @@ public sealed class DominoGameService(IPlayerClient playerClient, IDominoRandomi
     private async Task EndNormalGameAsync(int winnerIndex, CancellationToken cancellationToken)
     {
         ended = true;
-        await NotifyResultsAsync(new HashSet<int> { winnerIndex }, cancellationToken);
+        await NotifyResultsAsync(GetTeamWinners(winnerIndex), cancellationToken);
     }
 
     private async Task EndBlockedGameAsync(CancellationToken cancellationToken)
     {
         ended = true;
-        int lowestScore = Enumerable.Range(0, PlayerCount)
-            .Where(index => !disqualified[index])
-            .Select(index => hands[index].Sum(tileIndex => DominoTile.All[tileIndex].Points))
-            .DefaultIfEmpty()
-            .Min();
-        HashSet<int> winners = Enumerable.Range(0, PlayerCount)
-            .Where(index => !disqualified[index] && hands[index].Sum(tileIndex => DominoTile.All[tileIndex].Points) == lowestScore)
-            .ToHashSet();
-        await NotifyResultsAsync(winners, cancellationToken);
+        int nextPlayer = NextPlayer(lastPlayerToPlay);
+        if (disqualified[lastPlayerToPlay] && disqualified[nextPlayer])
+        {
+            await NotifyResultsAsync(new HashSet<int>(), cancellationToken);
+            return;
+        }
+
+        int blockerScore = hands[lastPlayerToPlay].Sum(tileIndex => DominoTile.All[tileIndex].Points);
+        int nextPlayerScore = hands[nextPlayer].Sum(tileIndex => DominoTile.All[tileIndex].Points);
+        int winner = disqualified[nextPlayer] || !disqualified[lastPlayerToPlay] && blockerScore <= nextPlayerScore
+            ? lastPlayerToPlay
+            : nextPlayer;
+        await NotifyResultsAsync(GetTeamWinners(winner), cancellationToken);
     }
+
+    private HashSet<int> GetTeamWinners(int winnerIndex) => Enumerable.Range(0, PlayerCount)
+        .Where(index => index % 2 == winnerIndex % 2 && !disqualified[index])
+        .ToHashSet();
 
     private async Task NotifyResultsAsync(IReadOnlySet<int> winners, CancellationToken cancellationToken)
     {

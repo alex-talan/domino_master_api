@@ -4,6 +4,10 @@
 
 Implement a Master API responsible for orchestrating a four-player Domino game.
 
+Players use fixed partnerships: `p0` and `p2` form **Team0**, while `p1` and
+`p3` form **Team1**. A normal or blocked-game victory is awarded to the winning
+player's team, not just that player.
+
 The system consists of:
 - one (1) Master API;
 - four (4) Player APIs.
@@ -47,20 +51,25 @@ The game will start once the master application receives a call to `POST /start`
 
 The master application will randomly distribute 7 tiles to each player (28 total = all tiles). The master application will keep these 4 lists in memory, because it will need them in every turn. 
 
+After creating the four random hands, assign the complete hand containing
+`[6|6]` (tile index `27`) to Player1 (`p0`) by swapping it with `p0`'s hand.
+Do not move individual tiles between hands. The first player is therefore
+always `p0`, and the opening tile must be `[6|6]`.
+
 **Example**:
 The master application must define the following lists:
 ```csharp
-int[] player_1 = [3, 14, 22, 0, 7, 19, 11];
-int[] player_2 = [25, 8, 1, 16, 27, 4, 12];
-int[] player_3 = [9, 21, 17, 20, 13, 26, 18];
-int[] player_4 = [2, 10, 6, 23, 15, 24, 5];
+int[] player_1 = [3, 14, 27, 0, 7, 19, 11];
+int[] player_2 = [25, 8, 1, 16, 22, 6, 12];
+int[] player_3 = [9, 15, 10, 20, 13, 23, 18];
+int[] player_4 = [2, 21, 17, 26, 4, 24, 5];
 ```
 
 These lists contain only the indices of the tiles in the main list `Tiles`, that is well known by all players. For example, the following tiles are assigned to the first player:
 
 - 3: (0,3)
 - 14: (2,3)
-- 22: (4,4)
+- 27: (6,6)
 - 0: (0,0)
 - 7: (1,1)
 - 19: (3,4)
@@ -80,7 +89,7 @@ The master application starts the game by sending the state of the table to the 
     "p2": [],
     "p3": [],
 	"to_play": "p0",
-	"your_tiles": [3, 14, 22, 0, 7, 19, 11]
+    "your_tiles": [3, 14, 27, 0, 7, 19, 11]
 }
 ```
 
@@ -107,27 +116,27 @@ Example:
 
 ```json
 {
-    "tile": 22,
+    "tile": 27,
     "position": "tail"
 }
 ```
 
-The first player played the tile `(4,4)`. Note that, in this case, the position is not relevant because the table is empty.
+The first player played the required opening tile `(6,6)`. The position is not relevant because the table is empty.
 
 The game continues. The master application receives the play from player 1, performs some validations (we will see that later), and asks the second player to play:
 
 ```bash
 POST /play
 {
-    "table": [22],
-    "head": 4,
-    "tail": 4,
-    "p0": [22],
+    "table": [27],
+    "head": 6,
+    "tail": 6,
+    "p0": [27],
     "p1": [],
     "p2": [],
     "p3": [],
 	"to_play": "p1",
-	"your_tiles": [25, 8, 1, 16, 27, 4, 12]
+    "your_tiles": [25, 8, 1, 16, 22, 6, 12]
 }
 ```
 
@@ -135,17 +144,17 @@ Now player 2 (index=1) plays, sending the following response:
 
 ```json
 {
-    "tile": 4,
+    "tile": 6,
     "position": "tail"
 }
 ```
 
-Player 2 played the tile `(0,4)` at the back (`tail`).
+Player 2 played the tile `(0,6)` at the back (`tail`).
 
 The master application will validate the play according to the following rules:
 
-- If the table is empty, the position is not relevant: the tile is added to the table, and the play is valid.
-- If the table contains at least one tile, the position IS relevant, so the master application will verify whether the tile sent by the player contains the number assigned to the position they selected in the play. For this example, the player played the tile `(0,4)` at the tail. The tail of the game is 4 (`"tail":4`), and it is contained in the played tile, so the play is valid.
+- If the table is empty, only `[6|6]` is valid; its position is not relevant.
+- If the table contains at least one tile, the position IS relevant, so the master application will verify whether the tile sent by the player contains the number assigned to the position they selected in the play. For this example, the player played the tile `(0,6)` at the tail. The tail of the game is 6 (`"tail":6`), and it is contained in the played tile, so the play is valid.
 
 If the play is not validated, it is considered cheating, and the player is disqualified (e.g., `"p1": null`). The player 1 is no longer asked to play, and their tiles are (of course) out of play.
 
@@ -154,15 +163,15 @@ If the play is validated, the following payload is sent to the third player:
 ```bash
 POST /play
 {
-    "table": [22, 4],
-    "head": 4,
+    "table": [27, 6],
+    "head": 6,
     "tail": 0,
-    "p0": [22],
-    "p1": [4],
+    "p0": [27],
+    "p1": [6],
     "p2": [],
     "p3": [],
 	"to_play": "p2",
-	"your_tiles": [9, 21, 17, 20, 13, 26, 18]
+    "your_tiles": [9, 15, 10, 20, 13, 23, 18]
 }
 ```
 
@@ -184,15 +193,15 @@ In this case, the fourth player is called with the following payload (`head` and
 ```bash
 POST /play
 {
-    "table": [22, 4],
-    "head": 4,
+    "table": [27, 6],
+    "head": 6,
     "tail": 0,
-    "p0": [22],
-    "p1": [4],
+    "p0": [27],
+    "p1": [6],
     "p2": [-1],
     "p3": [],
 	"to_play": "p3",
-	"your_tiles": [2, 10, 6, 23, 15, 24, 5]
+    "your_tiles": [2, 21, 17, 26, 4, 24, 5]
 }
 ```
 
@@ -211,18 +220,18 @@ Then, the first round is finished and the following call is sent to the first pl
 ```bash
 POST /play
 {
-    "table": [22, 4, 2],
-    "head": 4,
+    "table": [27, 6, 2],
+    "head": 6,
     "tail": 2,
-    "p0": [20],
-    "p1": [5],
+    "p0": [27],
+    "p1": [6],
     "p2": [-1],
     "p3": [2],
 	"to_play": "p0",
 	"your_tiles": [3, 14, 0, 7, 19, 11]
 }
 ```
-Note that now, the current player's 1 tiles are updated: the tile 22 (already played) has been removed.
+Note that now, Player1's tiles are updated: tile 27 (already played) has been removed.
 
 And the game continues: it is now second player's turn. And so on...
 
@@ -237,18 +246,27 @@ The game will end if one of the following events occurs:
 
 If none of the 4 players can play because they do not have tiles compatible with the head or the **tail** of the table, the game is blocked. The master application can verify this when 4 consecutive `-1` values are received from the players.
 
-In that case, the master application selects the winner: the player with the fewest points in their tiles.
+In that case, compare only the remaining pip totals of the player who placed
+the last tile (the blocker) and the player to their right (the next seat).
+Turn order is `p0`, `p1`, `p2`, `p3`, then `p0`, so a blocker at `p3` is compared
+with `p0`. The lower total wins for their team. If the totals are equal, the
+blocker's team wins. Ignore the other two hands; do not sum team totals.
 
 Example:
 
 - Player 1's tiles: 16-(2,5), 24-(4,6). Total = 2+5+4+6 = 17 points
 - Player 2's tiles: 6-(0,6), 7-(1,1). Total = 0+6+1+1 = 8 points
-- Player 3's tiles: 3-(0,3). Total = 0+3 = 3 points → THE WINNER
+- Player 3's tiles: 3-(0,3). Total = 0+3 = 3 points
 - Player 4's tiles: 20-(3,5). Total = 3+5 = 8 points
 
-The master application then sends a final call to all players, with the field `win` set to `true` if the player is the winner and `false` otherwise.
+If Player1 (`p0`) blocked the table, compare their 17 points only with Player2
+(`p1`), who has 8. Team1 (`p1` and `p3`) wins, even though `p2` has only 3 points.
 
-If two or more players have the same score,  the master application declares those players as winners.
+The master application sends a final call to each non-disqualified player,
+with `win` set to `true` for members of the winning team and `false` otherwise.
+Disqualification remains individual: disqualified players cannot win and do
+not receive final callbacks. If one contender is disqualified, the other wins;
+if both are disqualified, no winner is declared.
 
 Example:
 
@@ -260,4 +278,5 @@ POST /end
 ```
 
 ### A player finishes
-The first player to play its last tile, becomes the winner. The other are declared losers.
+The first player to play their last tile wins for their team. Both eligible
+teammates receive `win: true`; members of the opposing team receive `win: false`.
