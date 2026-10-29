@@ -50,7 +50,7 @@ public sealed class DominoEndpointsTests : IClassFixture<WebApplicationFactory<P
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         player.GameIds.Should().HaveCount(games);
         writer.Writes.Should().Be(1);
-        writer.Wins.Should().Equal(0, 0, 0, 0);
+        writer.Wins.Should().Equal(0, 0);
     }
 
     [Fact]

@@ -2,7 +2,7 @@ namespace Application.Domino;
 
 public interface IGameStatisticsWriter
 {
-    public Task WriteAsync(IReadOnlyList<int> wins, CancellationToken cancellationToken);
+    public Task WriteAsync(IReadOnlyList<int> teamWins, CancellationToken cancellationToken);
 }
 
 public sealed class DominoBatchService(IPlayerClient playerClient, IDominoRandomizer randomizer, IGameStatisticsWriter statisticsWriter)
@@ -37,11 +37,11 @@ public sealed class DominoBatchService(IPlayerClient playerClient, IDominoRandom
 
     private sealed class WinnerCounter : IGameEventSink
     {
-        public int[] Wins { get; } = new int[4];
+        public int[] Wins { get; } = new int[2];
 
-        public void BeginGame()
-        {
-        }
+        private bool gameCounted;
+
+        public void BeginGame() => gameCounted = false;
 
         public void RecordTurn(TurnDecision decision)
         {
@@ -49,10 +49,11 @@ public sealed class DominoBatchService(IPlayerClient playerClient, IDominoRandom
 
         public void RecordResult(PlayerGameResult result)
         {
-            if (result.Win)
+            if (result.Win && !gameCounted)
             {
                 int playerIndex = int.Parse(result.Player.AsSpan(1), System.Globalization.CultureInfo.InvariantCulture);
-                Wins[playerIndex]++;
+                Wins[playerIndex % 2]++;
+                gameCounted = true;
             }
         }
     }

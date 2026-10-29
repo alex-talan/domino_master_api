@@ -59,20 +59,18 @@ Player callback timeouts and transport failures disqualify the affected player. 
 
 ## Batch statistics
 
-`POST /start?games=100` runs 100 games sequentially. Each game has fresh hands, table state, disqualification flags, and a new game ID. The Master retains only four win counters across games, not turn histories or per-game result records.
+`POST /start?games=100` runs 100 games sequentially. Each game has fresh hands, table state, disqualification flags, and a new game ID. The Master retains only two team win counters across games, not turn histories or per-game result records.
 
 After all games finish, `output.log` in the application's current working directory is overwritten with the win totals. The directory must be writable.
 
 For example:
 
 ```text
-Player1 wins 30 games
-Player2 wins 70 games
-Player3 wins 30 games
-Player4 wins 70 games
+Team0 (Player1 and Player3) wins 70 games
+Team1 (Player2 and Player4) wins 30 games
 ```
 
-Player1 through Player4 correspond to protocol players p0 through p3. Both eligible teammates receive one win per team victory, so the totals may exceed the number of games. Disqualified players receive no win. Games where everyone is disqualified have no winner. Batch runs do not write individual turn or result logs; framework console logging remains JSON.
+Player1 through Player4 correspond to protocol players p0 through p3. Each game won counts once for the winning team, so the totals never exceed the number of games. Games with no eligible winner are not counted. Batch runs do not write individual turn or result logs; framework console logging remains JSON.
 
 The Master assigns a UUID `game_id` at game start. `turn` starts at 1 and increments before each requested play, including passes, rejected moves, and timeouts. Skipped disqualified players do not consume a turn. Both `/play` and `/end` include these fields; `/end` uses the last requested turn number.
 

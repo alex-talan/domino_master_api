@@ -10,7 +10,7 @@ public sealed class LoggingGameEventSinkTests
     private static readonly Guid GameId = Guid.Parse("f47ac10b-58cc-4372-a567-0e02b2c3d479");
 
     [Fact]
-    public async Task StatisticsWriter_ShouldReplaceOutputWithExactlyFourTotals()
+    public async Task StatisticsWriter_ShouldReplaceOutputWithTeamTotals()
     {
         DirectoryInfo directory = Directory.CreateTempSubdirectory("domino-statistics-");
         string outputPath = Path.Combine(directory.FullName, "output.log");
@@ -19,13 +19,11 @@ public sealed class LoggingGameEventSinkTests
             await File.WriteAllTextAsync(outputPath, "previous game output");
             GameStatisticsWriter sut = new(outputPath);
 
-            await sut.WriteAsync([20, 70, 10, 0], CancellationToken.None);
+            await sut.WriteAsync([70, 30], CancellationToken.None);
 
             (await File.ReadAllLinesAsync(outputPath)).Should().Equal(
-                "Player1 wins 20 games",
-                "Player2 wins 70 games",
-                "Player3 wins 10 games",
-                "Player4 wins 0 games");
+                "Team0 (Player1 and Player3) wins 70 games",
+                "Team1 (Player2 and Player4) wins 30 games");
         }
         finally
         {

@@ -54,11 +54,11 @@ public sealed class DominoGameServiceTests
             request.Player0.Should().BeEmpty();
             request.Player1.Should().BeEmpty();
         });
-        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 0, 0, 0, 3 })), CancellationToken.None);
+        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 0, 3 })), CancellationToken.None);
 
         await sut.StartAsync(1, CancellationToken.None);
 
-        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 0, 0, 0, 1 })), CancellationToken.None);
+        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 0, 1 })), CancellationToken.None);
     }
 
     [Theory]
@@ -92,7 +92,7 @@ public sealed class DominoGameServiceTests
 
         await sut.StartAsync(2, CancellationToken.None);
 
-        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 2, 0, 2, 0 })), CancellationToken.None);
+        await writer.Received(1).WriteAsync(Arg.Is<IReadOnlyList<int>>(wins => wins.SequenceEqual(new[] { 2, 0 })), CancellationToken.None);
     }
 
     [Fact]
